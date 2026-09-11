@@ -88,7 +88,7 @@ class JellyfinWebSocketClient:
         while not self._stop_event.is_set():
             try:
                 _LOGGER.debug("Connecting to Jellyfin WebSocket: %s", url)
-                async with self._session.ws_connect(url, headers=headers, heartbeat=15) as ws:
+                async with self._session.ws_connect(url, headers=headers) as ws:
                     self._ws = ws
                     self._connected = True
                     _LOGGER.info("Connected to Jellyfin WebSocket")
