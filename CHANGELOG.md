@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Connected Clients Sensor (Resolves [#30](https://github.com/zupancicmarko/JellyHA/issues/30), thanks to @Grizzelbee)**: Added `sensor.jellyha_connected_clients` — counts all Jellyfin clients that are currently connected, regardless of play state. Unlike Active Sessions, this sensor updates the moment a client opens the app (via WebSocket push) making it ideal for Wake-on-LAN automations. Includes per-client attributes: `user`, `device`, `client`, `last_activity_date`, `is_playing`. See `examples/automations/wol_on_client_connect.yaml`.
 
 ### Deprecated
-- **Legacy Now Playing Sensors**: `sensor.jellyha_now_playing_<user>` is deprecated in favor of `media_player.jellyha_<user>` and will be removed in v2.0.0.
+- **Legacy Now Playing Sensors**: `sensor.jellyha_now_playing_<user>` is deprecated in favor of `media_player.jellyha_<user>`, `media_player.jellyha_<device_name>`and will be removed in v2.0.0.
 
 ### Changed
 - **Cinematic Item Details Modal**: Redesigned the "More Information" dialog with hero backdrop artwork, quick action buttons (Cast, Episodes, Trailer), and technical format badges.
