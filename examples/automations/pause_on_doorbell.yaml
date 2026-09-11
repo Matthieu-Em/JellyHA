@@ -1,0 +1,28 @@
+# ==============================================================================
+# JellyHA Automation Example: Pause Movie on Doorbell
+# ==============================================================================
+# Description:
+#   Automatically pauses active playback when a doorbell or smart doorbell sensor rings.
+#   Uses the session_id dynamically resolved from the now_playing user sensor.
+# ==============================================================================
+
+alias: "JellyHA: Pause Movie on Doorbell"
+description: "Pauses active Jellyfin playback when the doorbell rings"
+mode: single
+
+trigger:
+  - trigger: state
+    entity_id: binary_sensor.doorbell # Replace with your actual doorbell entity
+    to: "on"
+
+conditions:
+  # Only run if something is currently playing for this user
+  - condition: state
+    entity_id: media_player.jellyha_admin # Preferred in v1.3.0+ (or legacy sensor.jellyha_now_playing_admin)
+    state: "playing"
+
+actions:
+  - action: media_player.media_pause
+    target:
+      entity_id: media_player.jellyha_admin
+

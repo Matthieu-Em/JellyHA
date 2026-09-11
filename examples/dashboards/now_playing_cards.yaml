@@ -1,0 +1,73 @@
+# ==============================================================================
+# JellyHA Dashboard Examples: Now Playing Card Configurations
+# ==============================================================================
+# Below are curated examples for custom:jellyha-now-playing-card.
+#
+# Note: Starting in v1.3.0, media_player.jellyha_<user> is the preferred entity.
+# Legacy sensor.jellyha_now_playing_<user> remains supported for backward compatibility.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Full Fanart Backdrop (Rich Cinematic Display)
+# ------------------------------------------------------------------------------
+type: custom:jellyha-now-playing-card
+entity: media_player.jellyha_admin # Replace with your user media player
+title: "Now Watching"
+show_background: true
+show_title: true
+show_subtitle: true
+show_client: true
+show_user: true
+show_time: true
+show_media_type_badge: true
+show_genres: true
+show_ratings: true
+show_runtime: true
+show_year: true
+
+# ------------------------------------------------------------------------------
+# 2. Compact Minimal Card (Sidebar or Mobile Dashboard)
+# ------------------------------------------------------------------------------
+type: custom:jellyha-now-playing-card
+entity: media_player.jellyha_admin
+show_background: false
+show_title: true
+show_subtitle: true
+show_client: false
+show_user: false
+show_time: true
+show_media_type_badge: false
+show_genres: false
+show_ratings: false
+
+# ------------------------------------------------------------------------------
+# 3. Multi-Instance Setup Example
+# ------------------------------------------------------------------------------
+# When running multiple JellyHA servers (e.g. Movies instance and Music instance),
+# target each card explicitly to the instance's user media player:
+type: vertical-stack
+cards:
+  - type: custom:jellyha-now-playing-card
+    entity: media_player.jellyha_movies_admin
+    title: "Movies Server"
+    show_background: true
+  - type: custom:jellyha-now-playing-card
+    entity: media_player.jellyha_music_admin
+    title: "Music Server"
+    show_background: false
+
+# ------------------------------------------------------------------------------
+# 4. Dedicated Client/Device Media Player (Room-Based Dashboard)
+# ------------------------------------------------------------------------------
+# Targets a physical device player (e.g. Smart TV, Fire TV, Shield TV) created
+# via Settings → Devices & Services → JellyHA → Configure → Client/Device Media Players.
+# Shows playback occurring in the Living Room regardless of which user is watching.
+type: custom:jellyha-now-playing-card
+entity: media_player.jellyha_living_room_tv
+title: "Living Room TV"
+show_background: true
+show_title: true
+show_subtitle: true
+show_client: true
+show_user: true
+show_time: true

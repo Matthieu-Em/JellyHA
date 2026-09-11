@@ -5,6 +5,55 @@ All notable changes to JellyHA will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-11
+
+### Added
+- **Jellyfin 12.0 Ready**: Full compatibility with Jellyfin 12.0+ WebSocket authentication and modern universal API endpoints (Fixes #23, PR #24 by @odtgit, and #29 with help from @dlip9663).
+- **Device-Based Media Players (Resolves [#12](https://github.com/zupancicmarko/JellyHA/issues/12), thanks to @barrelltitor)**: Added dedicated media player entities for physical client devices (e.g., Smart TVs, Apple TV, Fire TV) in Options Flow. These enable room-specific automations (like cinema lighting) regardless of which user is watching.
+- **Enhanced Media Players**: `media_player.jellyha_<user>` is now the primary entity for playback and automations, featuring full transport controls (play, pause, stop, seek, shuffle, repeat, volume) and rich state attributes.
+- **Community Card Compatibility**: Out-of-the-box compatibility with popular Lovelace cards including **Mini Media Player**, **Mushroom Media Card**, and **Universal Media Player**.
+- **Intro & Segment Detection**: Live detection of Intro, Outro, Recap, and Commercial segments (via Intro Skipper or chapters), complete with auto-skip timing attributes and change events.
+- **Chapter Awareness**: Media players now expose chapter names, index numbers, counts, and fire chapter transition events.
+- **HDR & Dynamic Range Detection (Resolves [#18](https://github.com/zupancicmarko/JellyHA/issues/18))**: Real-time detection of SDR, HDR10, HDR10+, Dolby Vision, and HLG formats to trigger TV picture modes and ambient lighting automations.
+- **Run Script Action in Library Card (Resolves [#10](https://github.com/zupancicmarko/JellyHA/issues/10), thanks to @garpernaut)**: Tap, hold, or double-tap any media poster to trigger a Home Assistant script with full media details passed directly into template variables.
+- **Shows vs. Episodes in Library Card**: Added an option to display newly added individual episodes instead of full series, with optional series poster art for uniform layouts.
+- **Supercharged Search Service (Resolves [#13](https://github.com/zupancicmarko/JellyHA/issues/13), thanks to @deergitseason)**: Added sorting, granular filtering (by studio, person, parent show), and enriched TV episode search results with parent series metadata.
+- **Smart Chromecast TV Playback**: Playing a series on Chromecast now automatically resolves to the next unplayed episode.
+- **Subtitle Selection for Chromecast (Resolves [#15](https://github.com/zupancicmarko/JellyHA/issues/15), thanks to @danezu-create)**: Added full subtitle controls to `jellyha.play_on_chromecast` and the Library Card editor (`subtitle_mode`: `auto`, `none`, `forced_only`, `custom`, and prioritized language list `subtitle_language`, e.g. `sl, en`). Subtitles are automatically burned into the stream via server-side video transcoding for bitmap formats (PGS, VOBSUB, DVDSUB) and delivered externally for text formats (WebVTT/SubRip), with automatic fallback to user profile preferences or English.
+- **Card Editor Polish & Scoped Labels**: Scoped card editor cast fields to **Cast Subtitles** and **Cast Subtitle Priority**, filtered the Default Cast Device picker strictly to Google Cast endpoints, and aligned Double Tap spacing with the cast device selector.
+- **New Jellyfin Sensors**: Added dedicated sensors for **Movies Count**, **Series Count**, **Episodes Count**, **Active Transcoding Streams**, and **Media Storage Free Space** (GB & Percentage with breakdown and capacity attributes).
+- **Latest Media Sensors**: Added **Latest Movie** and **Latest Episode** sensors featuring rich attributes: runtime, overview, ratings, series and episode info, dynamic range (HDR/DV), resolution, and codecs.
+- **Automation & Dashboard Examples**: Added ready-to-use YAML examples in the new `examples/` directory for lighting, auto-skip, notifications, and dashboards.
+- **Connected Clients Sensor (Resolves [#30](https://github.com/zupancicmarko/JellyHA/issues/30), thanks to @Grizzelbee)**: Added `sensor.jellyha_connected_clients` — counts all Jellyfin clients that are currently connected, regardless of play state. Unlike Active Sessions, this sensor updates the moment a client opens the app (via WebSocket push) making it ideal for Wake-on-LAN automations. Includes per-client attributes: `user`, `device`, `client`, `last_activity_date`, `is_playing`. See `examples/automations/wol_on_client_connect.yaml`.
+
+### Deprecated
+- **Legacy Now Playing Sensors**: `sensor.jellyha_now_playing_<user>` is deprecated in favor of `media_player.jellyha_<user>`, `media_player.jellyha_<device_name>`and will be removed in v2.0.0.
+
+### Changed
+- **Cinematic Item Details Modal**: Redesigned the "More Information" dialog with hero backdrop artwork, quick action buttons (Cast, Episodes, Trailer), and technical format badges.
+- **Streamlined Documentation**: Replaced inline YAML configurations in `README.md` with organized references to `examples/`.
+- **Modernized Card Editors**: All card settings and form inputs now use native Home Assistant selectors.
+
+### Fixed
+- **Stack-in-Card & Vertical Stack Layouts (Fixes [#21](https://github.com/zupancicmarko/JellyHA/issues/21), thanks to @bbqbob)**: Resolved layout collapse, clipping, and floating controls when Now Playing cards are placed inside vertical stacks, `stack-in-card`, or clamped Section views.
+- **Jellyfin 12.0 Compatibility & Stability (Fixes [#29](https://github.com/zupancicmarko/JellyHA/issues/29), thanks to @dlip9663)**: Fixed API key deletion on reload, updated deprecated user endpoints, and hardened WebSocket keepalives against silent dropouts.
+- **Chromecast Playback on Jellyfin 12.0**: Added case-sensitive `ApiKey` parameter to HLS stream manifests (`master.m3u8`), resolving `401 Unauthorized` playback failures when casting to Chromecast devices.
+- **Chromecast HLS Stream Manifest Caching & Session Reuse**: Prevented Chromecast from replaying cached segments when switching subtitle streams by injecting unique `PlaySessionId` tokens per transcode job and issuing an automatic device reset before `play_media`.
+- **Item Details Dialog Subtitle Pass-through**: Fixed `Play`, `Cast`, and `Play Next Up` actions inside the "More Information" dialog not respecting the card's configured cast subtitle strategy.
+- **Large Libraries & Collections (Fixes [#22](https://github.com/zupancicmarko/JellyHA/issues/22), thanks to @Matthieu-Em)**: Fixed movies inside box sets being hidden and added automatic batching so libraries with thousands of items sync completely.
+- **Episode & Library Statistics (Fixes [#22](https://github.com/zupancicmarko/JellyHA/issues/22), thanks to @Matthieu-Em)**: Corrected watched episode counts and library sensor aggregation.
+- **Service Action Validation (Fixes [#28](https://github.com/zupancicmarko/JellyHA/issues/28), thanks to @slm020)*: Fixed `extra keys not allowed` errors across JellyHA service calls.
+- **Episode List Crash**: Fixed a template crash in "View All Episodes" when series contain unrated episodes.
+- **Episode Screenshots**: Corrected episode list rows to show individual episode thumbnails instead of series backdrops.
+- **Trailer Playback**: YouTube trailer links now open directly in YouTube rather than redirecting to Jellyfin.
+- **Theme Border Radius**: Fixed poster corner rounding when using custom themes with large border radii.
+- **Date Added & "New" Badges**: Fixed "Show Date Added" and newly-added badges not appearing on library cards.
+- **Next Up Filtering**: Fixed favorite and watch status filters not applying to the Next Up view.
+- **Episode Favorites**: TV episodes now inherit parent series favorite status so favorite filters and badges work seamlessly.
+- **Card Editor Defaults**: Fixed visual editor toggles (playback controls, runtime, genres, background) showing out of sync on newly created cards.
+- **Carousel Alignment**: Added a horizontal alignment option (center / left) in the Library Card editor.
+
+
 ## [1.2.0] - 2026-03-22
 
 ### Added

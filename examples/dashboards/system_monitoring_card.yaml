@@ -1,0 +1,136 @@
+# ==============================================================================
+# JellyHA Dashboard Example: System & Library Monitoring Stack
+# ==============================================================================
+# Description:
+#   A complete Home Assistant Lovelace vertical stack displaying JellyHA system
+#   status, WebSocket connectivity, full library breakdowns (movies, series,
+#   episodes), latest content added with rich metadata, active & transcoding
+#   sessions, modern storage percentage meter, and refresh diagnostics.
+# ==============================================================================
+
+type: vertical-stack
+cards:
+  - type: markdown
+    content: >
+      # 🪼 JellyHA Dashboard
+
+      **Jellyfin Version:** {{ states('sensor.jellyha_jellyfin_version') }} |
+      **Websocket Status:** {{ states('sensor.jellyha_websocket_status') }}
+  - type: entities
+    title: Library Content
+    state_color: true
+    entities:
+      - entity: sensor.jellyha_library
+        name: Total Items
+        icon: mdi:video-vintage
+        secondary_info: last-changed
+      - type: divider
+      - entity: sensor.jellyha_movies
+        name: Total Movies
+        icon: mdi:movie-open
+      - entity: sensor.jellyha_series
+        name: Total Series
+        icon: mdi:video
+      - entity: sensor.jellyha_episodes
+        name: Total Episodes
+        icon: mdi:television-play
+      - type: divider
+      - entity: sensor.jellyha_unwatched_movies
+        name: Unwatched Movies
+        icon: mdi:movie-open
+      - entity: sensor.jellyha_watched_movies
+        name: Watched Movies
+        icon: mdi:movie-check
+      - type: divider
+      - entity: sensor.jellyha_unwatched_series
+        name: Unwatched Series
+        icon: mdi:video-outline
+      - entity: sensor.jellyha_watched_series
+        name: Watched Series
+        icon: mdi:video-check-outline
+      - entity: sensor.jellyha_unwatched_episodes
+        name: Unwatched Episodes
+        icon: mdi:video
+      - entity: sensor.jellyha_watched_episodes
+        name: Watched Episodes
+        icon: mdi:video-check
+  - type: horizontal-stack
+    cards:
+      - type: gauge
+        entity: sensor.jellyha_media_storage_free_percentage
+        name: Storage Free
+        min: 0
+        max: 100
+        needle: false
+        segments:
+          - from: 0
+            color: '#f43f5e'
+          - from: 15
+            color: '#f59e0b'
+          - from: 30
+            color: '#10b981'
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.jellyha_connected_clients
+        name: Connected Clients
+        icon: mdi:account-multiple
+      - type: tile
+        entity: sensor.jellyha_active_sessions
+        name: Active Sessions
+        icon: mdi:play-circle
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.jellyha_transcoding_streams
+        name: Transcoding Streams
+        icon: mdi:sync
+      - type: tile
+        entity: sensor.jellyha_favorites
+        name: Favorites
+        icon: mdi:heart
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.jellyha_latest_movie
+        name: Latest Movie
+        icon: mdi:movie-star
+      - type: tile
+        entity: sensor.jellyha_latest_episode
+        name: Latest Episode
+        icon: mdi:television-star
+  - type: markdown
+    content: >
+      {% set sessions = state_attr('sensor.jellyha_active_sessions', 'sessions')
+      %} <ha-icon icon="mdi:movie-play"></ha-icon> **Currently Watching:** {% if
+      sessions and sessions[0] is defined %}
+        **{{ sessions[0].title }}** *(by {{ sessions[0].user }} on {{ sessions[0].device }})*
+      {% else %}
+        *Nothing is currently playing*
+      {% endif %}
+  - type: entities
+    title: Activity & System
+    entities:
+      - entity: sensor.jellyha_now_playing_admin
+        name: Admin Session
+        icon: mdi:account
+      - type: divider
+      - entity: sensor.jellyha_media_storage_free
+        name: Free Media Storage
+        icon: mdi:harddisk
+      - entity: sensor.jellyha_last_library_update
+        name: Last Library Update
+        format: relative
+      - entity: sensor.jellyha_last_refresh
+        name: Last Refresh
+        format: relative
+      - entity: sensor.jellyha_refresh_duration
+        name: Refresh Duration
+  - type: markdown
+    content: >
+      {% set free_tb = state_attr('sensor.jellyha_media_storage_free',
+      'free_tb') %} {% set total_tb =
+      state_attr('sensor.jellyha_media_storage_free', 'total_tb') %} {% set
+      free_pct = states('sensor.jellyha_media_storage_free_percentage') %} 💾
+      **Storage Capacity:** {{ free_tb }} TB free of {{ total_tb }} TB ({{
+      free_pct }}%)

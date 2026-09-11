@@ -1,0 +1,200 @@
+# ==============================================================================
+# !! NOTE: This script has NOT been fully tested in a live environment.
+# !!        Logic and URL formats are based on official JellyCon/Jellyfin Kodi
+# !!        add-on documentation and community reports. Verify and adjust for
+# !!        your specific Kodi add-on version before use.
+# ==============================================================================
+# JellyHA Script Example: Card Click Action -> Play on Kodi
+# ==============================================================================
+# Description:
+#   Handles playback routing when a user clicks, holds, or double-taps a poster
+#   in the JellyHA Library Card, sending the selected media to a Kodi media center.
+#
+# Prerequisites (Home Assistant & Kodi Setup):
+# --------------------------------------------
+# 1. Install the "Kodi" integration in Home Assistant:
+#      - Go to Settings -> Devices & Services -> Add Integration -> Kodi
+#      - Follow prompts to connect to your Kodi instance (e.g. media_player.kodi)
+#
+# 2. Install a Jellyfin Kodi add-on (choose one):
+#
+#    Option A — JellyCon (Recommended, streaming add-on):
+#      - Install from the official Jellyfin Kodi repository.
+#      - Does NOT require full library sync; streams directly from Jellyfin on demand.
+#      - Plugin path: plugin://plugin.video.jellycon/?item_id={id}&mode=PLAY
+#
+#    Option B — Jellyfin for Kodi (sync add-on):
+#      - Syncs the Jellyfin library into Kodi's native database.
+#      - Plugin path: plugin://plugin.video.jellyfin/?mode=play&id={id}
+#
+# 3. Update the `kodi_player` default and the plugin URL below to match your setup.
+#
+# Card Configuration (Lovelace YAML):
+# -----------------------------------
+# type: custom:jellyha-library-card
+# entity: sensor.jellyha_library
+# title: "Movies & TV"
+# click_action: call-service
+# click_service: script.card_action_play_on_kodi
+#
+# Variables Injected Automatically by JellyHA Library Card:
+# ---------------------------------------------------------
+# When 'click_action: call-service' is configured, the JellyHA card calls the
+# script and injects all media metadata directly into the Jinja template namespace:
+#
+#   - title / name: Media title ("Inception" or "Episode 1")
+#   - media_type: "Movie", "Series", "Episode", or "Audio"
+#   - series_name: Show name if episode ("Severance")
+#   - series_id: Show GUID
+#   - season: Season number (e.g. 1)
+#   - episode: Episode number (e.g. 4)
+#   - year: Release year (e.g. 2025)
+#   - item_id: Jellyfin GUID
+#   - poster_url: Authenticated proxy poster image URL
+#   - series_poster_url: Parent series poster cover URL (episodes)
+#   - backdrop_url: Fanart background image URL
+#   - overview / description: Plot synopsis
+#   - dynamic_range: Dynamic range string ("SDR", "HDR10", "Dolby Vision", "HLG")
+#   - runtime_minutes: Runtime duration in minutes
+#   - jellyfin_url: Direct URL to item in Jellyfin web client
+#   - config_entry_id: Target JellyHA instance ID
+#   - action_type: "click", "hold", or "double_tap"
+# ==============================================================================
+
+alias: "JellyHA: Play on Kodi (Script)"
+description: "Handles playback routing from JellyHA Library Card click actions to Kodi."
+mode: queued
+max: 5
+icon: mdi:kodi
+
+fields:
+  item_id:
+    name: Item ID
+    description: Jellyfin media item ID
+    required: false
+    example: "49ed9530ac681f148ca09b91ca7010c8"
+    selector:
+      text:
+  title:
+    name: Title
+    description: Media title
+    required: false
+    example: "Inception"
+    selector:
+      text:
+  media_type:
+    name: Media Type
+    description: Type of media (Movie, Episode, Series)
+    required: false
+    default: "Movie"
+    selector:
+      text:
+  series_name:
+    name: Series Name
+    description: Parent TV series name (if episode)
+    required: false
+    selector:
+      text:
+  season:
+    name: Season
+    description: Season number
+    required: false
+    selector:
+      number:
+        min: 1
+        max: 100
+  episode:
+    name: Episode
+    description: Episode number
+    required: false
+    selector:
+      number:
+        min: 1
+        max: 1000
+  year:
+    name: Year
+    description: Release year
+    required: false
+    selector:
+      number:
+        min: 1900
+        max: 2050
+
+sequence:
+  # Determine target Kodi player entity.
+  # Change 'media_player.kodi' to match your Kodi entity ID.
+  - variables:
+      kodi_player: "media_player.kodi"
+
+  - choose:
+      # ------------------------------------------------------------------------
+      # Case A: Item ID provided (triggered by JellyHA Library Card click)
+      # ------------------------------------------------------------------------
+      - conditions:
+          - condition: template
+            value_template: "{{ item_id is defined and item_id not in [none, '', 'None'] }}"
+        sequence:
+          # Log to Home Assistant Logbook for diagnostics
+          - action: logbook.log
+            data:
+              name: "JellyHA Kodi Player"
+              message: >-
+                Playing {{ media_type | default('Media') }}: {{ title | default(item_id) }}
+                {% if year %}({{ year }}){% endif %} on {{ kodi_player }}
+              domain: media_player
+              entity_id: "{{ kodi_player }}"
+
+          - choose:
+              # ------------------------------------------------------------------
+              # Option A: JellyCon add-on (plugin.video.jellycon)
+              #   - Recommended: streams directly on demand, no sync required.
+              #   - URL format confirmed: item_id first, then mode=PLAY.
+              # ------------------------------------------------------------------
+              - conditions:
+                  - condition: template
+                    # Kodi is reachable and JellyCon add-on is installed.
+                    # Change to 'plugin.video.jellyfin' if using Jellyfin for Kodi.
+                    value_template: >-
+                      {{ states(kodi_player) not in ['unavailable', 'unknown', 'off'] }}
+                sequence:
+                  - action: kodi.call_method
+                    target:
+                      entity_id: "{{ kodi_player }}"
+                    data:
+                      method: Player.Open
+                      item:
+                        # JellyCon URL: item_id parameter MUST come before mode=PLAY
+                        file: "plugin://plugin.video.jellycon/?item_id={{ item_id }}&mode=PLAY"
+                        # If using "Jellyfin for Kodi" instead, replace the line above with:
+                        # file: "plugin://plugin.video.jellyfin/?mode=play&id={{ item_id }}"
+
+              # ------------------------------------------------------------------
+              # Fallback: Kodi unavailable — log a warning
+              # ------------------------------------------------------------------
+              - conditions: []
+                sequence:
+                  - action: logbook.log
+                    data:
+                      name: "JellyHA Kodi Player"
+                      message: "Kodi ({{ kodi_player }}) is unavailable. Cannot play: {{ title | default(item_id) }}"
+                      domain: media_player
+                      entity_id: "{{ kodi_player }}"
+
+      # ------------------------------------------------------------------------
+      # Case B: No item provided — resume/unpause active Kodi playback
+      # (e.g. user triggered script directly from HA Scripts UI)
+      # ------------------------------------------------------------------------
+      - conditions:
+          - condition: template
+            value_template: "{{ item_id is not defined or item_id in [none, '', 'None'] }}"
+        sequence:
+          - action: logbook.log
+            data:
+              name: "JellyHA Kodi Player"
+              message: "Resume / Unpause playback on {{ kodi_player }}"
+              domain: media_player
+              entity_id: "{{ kodi_player }}"
+
+          - action: media_player.media_play_pause
+            target:
+              entity_id: "{{ kodi_player }}"

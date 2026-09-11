@@ -44,6 +44,7 @@ const DEFAULT_CONFIG: Partial<JellyHALibraryCardConfig> = {
   title: '',
   layout: 'carousel',
   media_type: 'both',
+  tv_content: 'series',
   items_per_page: 3,
   max_pages: 5,
   auto_swipe_interval: 0, // 0 = disabled, otherwise seconds
@@ -56,7 +57,9 @@ const DEFAULT_CONFIG: Partial<JellyHALibraryCardConfig> = {
   show_genres: true,
   show_description_on_hover: true,
   enable_pagination: true,
+  show_pagination_dots: true,
   metadata_position: 'below',
+  horizontal_alignment: 'center',
   show_date_added: false,
   rating_source: 'auto',
   new_badge_days: 3,
@@ -64,8 +67,11 @@ const DEFAULT_CONFIG: Partial<JellyHALibraryCardConfig> = {
   show_watched_status: true,
   click_action: 'more-info',
   hold_action: 'jellyfin',
+  double_tap_action: 'none',
   default_cast_device: '',
   show_now_playing: true,
+  use_series_image: false,
+  show_search: false,
   filter_favorites: false,
   status_filter: 'all',
   filter_newly_added: false,
@@ -884,12 +890,25 @@ export class JellyHALibraryCard extends LitElement {
       if (this._config.media_type === 'next_up') {
         result = await this.hass.callWS<{ items: MediaItem[] }>({
           type: 'jellyha/get_user_next_up',
-          entity_id: this._config.entity
+          entity_id: this._config.entity,
+          server_entity_id: this._config.entity,
+        });
+      } else if (
+        (this._config.media_type === 'series' || this._config.media_type === 'both' || !this._config.media_type) &&
+        this._config.tv_content === 'episodes'
+      ) {
+        const itemTypes = this._config.media_type === 'series' ? ['Episode'] : ['Movie', 'Episode'];
+        result = await this.hass.callWS<{ items: MediaItem[] }>({
+          type: 'jellyha/get_latest_items',
+          entity_id: this._config.entity,
+          server_entity_id: this._config.entity,
+          item_types: itemTypes,
         });
       } else {
         result = await this.hass.callWS<{ items: MediaItem[] }>({
           type: 'jellyha/get_items',
-          entity_id: this._config.entity
+          entity_id: this._config.entity,
+          server_entity_id: this._config.entity,
         });
       }
 
@@ -928,10 +947,23 @@ export class JellyHALibraryCard extends LitElement {
         const entryId = (entity.attributes as unknown as SensorData).entry_id;
         const lastUpdated = (entity.attributes as unknown as SensorData).last_updated;
 
-        // If entry_id changed or last_updated changed, fetch items
-        // Also fetch if we haven't fetched yet (empty items)
+        let shouldFetch = false;
         if (lastUpdated !== this._lastUpdate || (this._items.length === 0 && entryId)) {
           this._lastUpdate = lastUpdated;
+          shouldFetch = true;
+        } else if (changedProps.has('_config')) {
+          const oldConfig = changedProps.get('_config') as JellyHALibraryCardConfig | undefined;
+          if (
+            oldConfig &&
+            (oldConfig.media_type !== this._config?.media_type ||
+              oldConfig.tv_content !== this._config?.tv_content ||
+              oldConfig.entity !== this._config?.entity)
+          ) {
+            shouldFetch = true;
+          }
+        }
+
+        if (shouldFetch) {
           this._fetchItems();
         }
       }
@@ -1016,22 +1048,19 @@ export class JellyHALibraryCard extends LitElement {
     if (this._config.media_type === 'movies') {
       filtered = filtered.filter((item) => item.type === 'Movie');
     } else if (this._config.media_type === 'series') {
-      filtered = filtered.filter((item) => item.type === 'Series');
+      if (this._config.tv_content === 'episodes') {
+        filtered = filtered.filter((item) => item.type === 'Episode');
+      } else {
+        filtered = filtered.filter((item) => item.type === 'Series');
+      }
+    } else if (this._config.media_type === 'both' || !this._config.media_type) {
+      if (this._config.tv_content === 'episodes') {
+        filtered = filtered.filter((item) => item.type === 'Movie' || item.type === 'Episode');
+      } else {
+        filtered = filtered.filter((item) => item.type !== 'Episode');
+      }
     } else if (this._config.media_type === 'next_up') {
       // Next Up items are already filtered by backend
-      // But we might want to ensure they are valid
-
-      // CRITICAL: For Next Up, we MUST respect the server's order (which is by Last Played).
-      // If we let the card re-sort by default (Date Added), it scrambles the order.
-      // So we bypass the entire client-side sorting block below.
-
-      // Apply limit based on items_per_page * max_pages (same as below)
-      const maxPages = this._config.max_pages;
-      if (maxPages !== undefined && maxPages !== null && maxPages > 0) {
-        const limit = (this._config.items_per_page || 5) * maxPages;
-        filtered = filtered.slice(0, limit);
-      }
-      return filtered;
     }
 
     // Filter by favorites
@@ -1039,7 +1068,6 @@ export class JellyHALibraryCard extends LitElement {
       filtered = filtered.filter((item) => item.is_favorite === true);
     }
 
-    // Filter by unwatched
     // Filter by watch status
     const statusFilter = this._config.status_filter || 'all';
     if (statusFilter === 'unwatched') {
@@ -1047,9 +1075,22 @@ export class JellyHALibraryCard extends LitElement {
     } else if (statusFilter === 'watched') {
       filtered = filtered.filter((item) => item.is_played === true);
     }
+
     // Filter by newly added
     if (this._config.filter_newly_added) {
       filtered = filtered.filter((item) => isNewItem(item, this._config.new_badge_days || 0));
+    }
+
+    // CRITICAL: For Next Up, we MUST respect the server's order (which is by Last Played).
+    // If we let the card re-sort by default (Date Added), it scrambles the order.
+    // So we bypass the client-side sorting block below.
+    if (this._config.media_type === 'next_up') {
+      const maxPages = this._config.max_pages;
+      if (maxPages !== undefined && maxPages !== null && maxPages > 0) {
+        const limit = (this._config.items_per_page || 5) * maxPages;
+        filtered = filtered.slice(0, limit);
+      }
+      return filtered;
     }
 
     // Sorting
@@ -1409,19 +1450,22 @@ export class JellyHALibraryCard extends LitElement {
         this._openExternalUrl(item.jellyfin_url);
         break;
       case 'cast':
-        this._castMedia(item);
+        this._castMedia(item, type);
         break;
       case 'more-info':
         this._showItemDetails(item);
         break;
       case 'trailer':
         if (item.trailer_url) {
-          this._openExternalUrl(item.trailer_url);
+          window.open(item.trailer_url, '_blank');
         } else {
           fireEvent(this, 'hass-notification', {
             message: localize(this.hass.locale?.language || this.hass.language, 'no_trailer'),
           });
         }
+        break;
+      case 'call-service':
+        this._callCustomService(item, type);
         break;
       case 'none':
       default:
@@ -1429,17 +1473,125 @@ export class JellyHALibraryCard extends LitElement {
     }
   }
 
-  private async _castMedia(item: MediaItem): Promise<void> {
+  private async _callCustomService(item: MediaItem, type: 'click' | 'hold' | 'double_tap'): Promise<void> {
+    let serviceString = '';
+    let customData: Record<string, any> = {};
+
+    if (type === 'click') {
+      serviceString = this._config.click_service || this._config.service || '';
+      customData = this._config.click_service_data || this._config.service_data || {};
+    } else if (type === 'hold') {
+      serviceString = this._config.hold_service || this._config.service || '';
+      customData = this._config.hold_service_data || this._config.service_data || {};
+    } else if (type === 'double_tap') {
+      serviceString = this._config.double_tap_service || this._config.service || '';
+      customData = this._config.double_tap_service_data || this._config.service_data || {};
+    }
+
+    // Build rich payload with all media attributes
+    const payload: Record<string, any> = {
+      ...customData,
+      item_id: item.id,
+      title: item.name,
+      name: item.name,
+      media_type: item.type,
+      series_name: item.series_name || null,
+      series_id: item.series_id || null,
+      season: item.season != null ? item.season : null,
+      episode: item.episode != null ? item.episode : null,
+      year: item.year || null,
+      genres: item.genres || [],
+      rating: item.rating || null,
+      poster_url: item.poster_url || null,
+      series_poster_url: item.series_poster_url || null,
+      backdrop_url: item.backdrop_url || null,
+      date_created: item.date_added || null,
+      date_added: item.date_added || null,
+      description: item.description || null,
+      overview: item.description || null,
+      official_rating: item.official_rating || null,
+      last_played_date: item.last_played_date || null,
+      // Music attributes (Audio, MusicAlbum, MusicArtist, etc.)
+      artist: item.artist_name || item.album_artist || null,
+      artist_name: item.artist_name || null,
+      album: item.album || null,
+      album_artist: item.album_artist || null,
+      jellyfin_url: item.jellyfin_url || null,
+      is_played: item.is_played ?? false,
+      is_favorite: item.is_favorite ?? false,
+      runtime_minutes: item.runtime_minutes || null,
+      dynamic_range: item.dynamic_range || null,
+      video_range: item.video_range || null,
+      video_range_type: item.video_range_type || null,
+      video_codec: item.video_codec || null,
+      dv_profile: item.dv_profile || null,
+      config_entry_id: item.config_entry_id || item.entry_id || null,
+      action_type: type,
+    };
+
+    // Always fire Home Assistant DOM event so automations can also trigger via event
+    fireEvent(this, 'jellyha_item_clicked', payload);
+
+    if (!serviceString) {
+      console.warn('JellyHA: "call-service" action selected but no action/service configured.');
+      fireEvent(this, 'hass-notification', {
+        message: 'No script configured for "Run Script" action. Please select a script in the card editor.',
+      });
+      return;
+    }
+
+    // Parse domain and service name (e.g. "script.play_on_apple_tv" or "media_player.play_media")
+    const parts = serviceString.trim().split('.');
+    const domain = parts[0];
+    const serviceName = parts.slice(1).join('.');
+
+    if (!domain || !serviceName) {
+      console.error(`JellyHA: Invalid service name "${serviceString}". Expected format: domain.service (e.g. script.my_script)`);
+      fireEvent(this, 'hass-notification', {
+        message: `Invalid script/service name: "${serviceString}". Expected format: script.your_script_name`,
+      });
+      return;
+    }
+
+    try {
+      await this.hass.callService(domain, serviceName, payload);
+    } catch (err: any) {
+      console.error(`JellyHA: Failed to call service ${serviceString}`, err);
+      fireEvent(this, 'hass-notification', {
+        message: `Failed to call ${serviceString}: ${err?.message || err}`,
+      });
+    }
+  }
+
+  private async _castMedia(item: MediaItem, actionType?: string): Promise<void> {
     const entityId = this._config.default_cast_device;
     if (!entityId) {
       console.warn('JellyHA: No default cast device configured');
       return;
     }
+
+    let subtitleMode = this._config.subtitle_mode || 'auto';
+    let subtitleLanguage = this._config.subtitle_language;
+
+    if (actionType === 'click') {
+      if (this._config.click_subtitle_mode) subtitleMode = this._config.click_subtitle_mode;
+      if (this._config.click_subtitle_language) subtitleLanguage = this._config.click_subtitle_language;
+    } else if (actionType === 'hold') {
+      if (this._config.hold_subtitle_mode) subtitleMode = this._config.hold_subtitle_mode;
+      if (this._config.hold_subtitle_language) subtitleLanguage = this._config.hold_subtitle_language;
+    } else if (actionType === 'double_tap') {
+      if (this._config.double_tap_subtitle_mode) subtitleMode = this._config.double_tap_subtitle_mode;
+      if (this._config.double_tap_subtitle_language) subtitleLanguage = this._config.double_tap_subtitle_language;
+    }
+
     try {
       await this.hass.callService('jellyha', 'play_on_chromecast', {
         entity_id: entityId,
         item_id: item.id,
         server_entity_id: this._config.entity,
+        ...(item.config_entry_id ? { config_entry_id: item.config_entry_id } : {}),
+        subtitle_mode: subtitleMode,
+        ...(subtitleLanguage ? { subtitle_language: subtitleLanguage } : {}),
       });
     } catch (err) {
       console.error('JellyHA: Failed to cast media', err);
@@ -1448,6 +1600,17 @@ export class JellyHALibraryCard extends LitElement {
 
   private _openExternalUrl(url: string | undefined): void {
     if (!url) return;
+
+    // Never rewrite YouTube or external third-party video services
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes('youtube.com') || parsed.hostname.includes('youtu.be') || parsed.hostname.includes('vimeo.com')) {
+        window.open(url, '_blank');
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
 
     // Check if we have an external URL configured on the entity
     const entity = this.hass?.states[this._config?.entity];
@@ -1510,11 +1673,18 @@ export class JellyHALibraryCard extends LitElement {
   }
   private _showItemDetails(item: MediaItem): void {
     if (this._modal) {
+      let subtitleMode = this._config.subtitle_mode || 'auto';
+      let subtitleLanguage = this._config.subtitle_language;
+      if (this._config.click_subtitle_mode) subtitleMode = this._config.click_subtitle_mode;
+      if (this._config.click_subtitle_language) subtitleLanguage = this._config.click_subtitle_language;
+
       this._modal.showDialog({
         item,
         hass: this.hass,
         defaultCastDevice: this._config.default_cast_device,
-        serverEntityId: this._config.entity
+        serverEntityId: this._config.entity,
+        subtitleMode,
+        subtitleLanguage,
       });
     }
   }

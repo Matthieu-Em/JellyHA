@@ -62,38 +62,72 @@ export class JellyHANowPlayingEditor extends LitElement {
       return html``;
     }
 
-    // Filter for JellyHA Now Playing sensors
-    const nowPlayingSensors = Object.keys(this.hass.states).filter(
-      (entity) => entity.startsWith('sensor.jellyha_now_playing_')
+    // Available JellyHA entities: media_player (preferred) and legacy now playing sensors
+    const mediaPlayers = Object.keys(this.hass.states).filter(
+      (entity) =>
+        entity.startsWith('media_player.jellyha_') &&
+        !entity.includes('_library_browser') &&
+        !entity.endsWith('_browser')
+    );
+    const legacySensors = Object.keys(this.hass.states).filter(
+      (entity) =>
+        entity.startsWith('sensor.jellyha_') &&
+        entity.includes('now_playing')
     );
 
+    const availableEntities = [
+      ...mediaPlayers.map((e) => ({
+        entity: e,
+        label: `${this.hass.states[e]?.attributes.friendly_name || e} (Media Player)`,
+      })),
+      ...legacySensors.map((e) => ({
+        entity: e,
+        label: `${this.hass.states[e]?.attributes.friendly_name || e} (Legacy Sensor)`,
+      })),
+    ];
+
+    // Ensure currently configured entity is always present
+    if (this._config.entity && !availableEntities.some((e) => e.entity === this._config.entity)) {
+      availableEntities.unshift({
+        entity: this._config.entity,
+        label: String(this.hass.states[this._config.entity]?.attributes?.friendly_name || this._config.entity),
+      });
+    }
+
     const lang = this.hass.locale?.language || this.hass.language;
+    const labelText = localize(lang, 'editor.media_player') || 'Media Player';
 
     return html`
       <div class="card-config">
         <div class="form-row">
-          <ha-select
-            label="${localize(lang, 'editor.now_playing_sensor')}"
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{
+              select: {
+                mode: 'dropdown',
+                custom_value: true,
+                options: availableEntities.map((item) => ({
+                  value: item.entity,
+                  label: item.label,
+                })),
+              },
+            }}
             .value=${this._config.entity || ''}
-            @selected=${this._entityChanged}
-            @closed=${(e: Event) => e.stopPropagation()}
-          >
-            ${nowPlayingSensors.map(
-      (entity) => html`
-                <mwc-list-item .value=${entity}>
-                  ${this.hass.states[entity].attributes.friendly_name || entity}
-                </mwc-list-item>
-              `
-    )}
-          </ha-select>
+            .label=${labelText}
+            label="${labelText}"
+            @value-changed=${this._entityChanged}
+          ></ha-selector>
         </div>
 
         <div class="form-row">
-          <ha-textfield
-            label="${localize(lang, 'editor.title')} (Optional)"
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ text: {} }}
             .value=${this._config.title || ''}
-            @input=${this._titleChanged}
-          ></ha-textfield>
+            .label="${localize(lang, 'editor.title')} (Optional)"
+            label="${localize(lang, 'editor.title')} (Optional)"
+            @value-changed=${this._titleChanged}
+          ></ha-selector>
         </div>
 
         <div class="checkbox-pair">
@@ -131,7 +165,7 @@ export class JellyHANowPlayingEditor extends LitElement {
           </div>
           <div class="checkbox-row">
             <ha-switch
-              .checked=${this._config.show_genres === true}
+              .checked=${this._config.show_genres !== false}
               @change=${this._showGenresChanged}
             ></ha-switch>
             <span>${localize(lang, 'editor.show_genres')}</span>
@@ -140,7 +174,7 @@ export class JellyHANowPlayingEditor extends LitElement {
 
         <div class="checkbox-row">
           <ha-switch
-            .checked=${this._config.show_runtime === true}
+            .checked=${this._config.show_runtime !== false}
             @change=${this._showRuntimeChanged}
           ></ha-switch>
           <span>${localize(lang, 'editor.show_runtime')}</span>
@@ -148,7 +182,7 @@ export class JellyHANowPlayingEditor extends LitElement {
 
         <div class="checkbox-row">
           <ha-switch
-            .checked=${this._config.show_ratings === true}
+            .checked=${this._config.show_ratings !== false}
             @change=${this._showRatingsChanged}
           ></ha-switch>
           <span>${localize(lang, 'editor.show_rating')}</span>
@@ -181,7 +215,7 @@ export class JellyHANowPlayingEditor extends LitElement {
 
         <div class="checkbox-row">
           <ha-switch
-            .checked=${this._config.show_background === true}
+            .checked=${this._config.show_background !== false}
             @change=${this._showBackgroundChanged}
           ></ha-switch>
           <span>${localize(lang, 'editor.show_background')}</span>
@@ -194,18 +228,33 @@ export class JellyHANowPlayingEditor extends LitElement {
           ></ha-switch>
           <span>${localize(lang, 'editor.use_series_image')}</span>
         </div>
+
+        <div class="checkbox-row">
+          <ha-switch
+            .checked=${this._config.show_controls !== false}
+            @change=${this._showControlsChanged}
+          ></ha-switch>
+          <span>${localize(lang, 'editor.show_controls') || 'Show Playback Controls'}</span>
+        </div>
       </div>
     `;
   }
 
-  private _entityChanged(e: Event): void {
-    const target = e.target as HTMLSelectElement;
-    this._updateConfig('entity', target.value);
+  private _showControlsChanged(e: Event): void {
+    const target = e.target as HTMLInputElement;
+    this._updateConfig('show_controls', target.checked);
   }
 
-  private _titleChanged(e: Event): void {
-    const target = e.target as HTMLInputElement;
-    this._updateConfig('title', target.value);
+  private _entityChanged(e: CustomEvent): void {
+    const value = e.detail?.value !== undefined ? e.detail.value : (e.target as any)?.value;
+    if (value !== undefined) {
+      this._updateConfig('entity', value);
+    }
+  }
+
+  private _titleChanged(e: CustomEvent): void {
+    const value = e.detail?.value !== undefined ? e.detail.value : (e.target as any)?.value;
+    this._updateConfig('title', value);
   }
 
   private _showTitleChanged(e: Event): void {
