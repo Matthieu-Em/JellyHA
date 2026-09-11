@@ -69,6 +69,7 @@ Users can opt-in to dedicated media player entities per physical client device (
 * `sensor.jellyha_jellyfin_version`: Server version (e.g. `12.0.0`)
 * `sensor.jellyha_websocket_status`: WebSocket connection health status (`connected` / `disconnected`)
 * `sensor.jellyha_active_sessions`: Count of currently active playback sessions (attribute `sessions` lists session metadata)
+* `sensor.jellyha_connected_clients`: Count of all Jellyfin clients currently connected to the server, regardless of play state (attribute `clients` lists `user`, `device`, `client`, `last_activity_date`, `is_playing` per client). JellyHA's own internal session is excluded. Updates in real-time via WebSocket — ideal for Wake-on-LAN automations triggered before playback starts.
 * `sensor.jellyha_transcoding_streams`: Count of active media streams currently being transcoded (attribute `transcode_sessions` contains codec, reason, framerate)
 * `sensor.jellyha_media_storage_free`: Free storage space on primary media drive in GB (attributes: `free_bytes`, `used_bytes`, `total_bytes`, `free_tb`, `used_percent`)
 * `sensor.jellyha_media_storage_free_percentage`: Free storage space percentage on primary media drive (e.g. `62` %)
