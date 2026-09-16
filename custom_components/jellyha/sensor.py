@@ -82,29 +82,38 @@ async def async_setup_entry(
             )
 
     # Create per-library storage sensors
-    if coordinator.data and coordinator.data.get("storage"):
-        storage = coordinator.data["storage"]
-        configured_libraries = entry.options.get("libraries", entry.data.get("libraries", []))
-        libs = storage.get("Libraries", [])
-        
-        # Filter to configured libraries if any are specified
-        if configured_libraries:
-            libs = [lib for lib in libs if lib.get("Id") in configured_libraries]
-        
-        # Create a sensor for each library
-        for lib in libs:
-            library_id = lib.get("Id")
-            library_name = lib.get("Name")
-            if library_id and library_name:
-                sensors.append(
-                    JellyHALibraryStorageSensor(
-                        coordinator,
-                        entry,
-                        device_name,
-                        library_id,
-                        library_name,
-                    )
-                )
+    # NOTE: Currently disabled due to Jellyfin API limitations
+    # Jellyfin's Storage API returns filesystem-level data, not per-library sizes
+    # Multiple libraries on the same disk would show identical values
+    # This would be misleading for users
+    # 
+    # Potential solutions for future implementation:
+    # 1. Sum MediaSources.Size for all items in each library (performance intensive)
+    # 2. Wait for Jellyfin to add per-library size calculation to their API
+    #
+    # if coordinator.data and coordinator.data.get("storage"):
+    #     storage = coordinator.data["storage"]
+    #     configured_libraries = entry.options.get("libraries", entry.data.get("libraries", []))
+    #     libs = storage.get("Libraries", [])
+    #     
+    #     # Filter to configured libraries if any are specified
+    #     if configured_libraries:
+    #         libs = [lib for lib in libs if lib.get("Id") in configured_libraries]
+    #     
+    #     # Create a sensor for each library
+    #     for lib in libs:
+    #         library_id = lib.get("Id")
+    #         library_name = lib.get("Name")
+    #         if library_id and library_name:
+    #             sensors.append(
+    #                 JellyHALibraryStorageSensor(
+    #                     coordinator,
+    #                     entry,
+    #                     device_name,
+    #                     library_id,
+    #                     library_name,
+    #                 )
+    #             )
 
     async_add_entities(sensors)
 
@@ -1575,109 +1584,17 @@ class JellyHAMediaStorageFreePercentSensor(JellyHABaseSensor):
 
 
 
-class JellyHALibraryStorageSensor(JellyHABaseSensor):
-    """Sensor for individual library storage size."""
+# NOTE: JellyHALibraryStorageSensor is currently disabled due to Jellyfin API limitations
+# The Jellyfin /System/Info/Storage endpoint returns filesystem-level usage data,
+# not actual per-library storage consumption. Multiple libraries on the same disk
+# would report identical (and misleading) filesystem usage values.
+#
+# To properly implement this feature, we would need to:
+# 1. Query all items in each library individually with MediaSources field
+# 2. Sum the Size field from MediaSources for each item
+# 3. This would require additional API calls per library and increase load time
+#
+# Future implementation should wait for Jellyfin to add native per-library
+# size calculation to their API, or implement the MediaSources aggregation
+# with proper caching and performance considerations.
 
-    _attr_icon = "mdi:database"
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_native_unit_of_measurement = UnitOfInformation.GIGABYTES
-    _attr_suggested_display_precision = 1
-
-    def __init__(
-        self,
-        coordinator: JellyHALibraryCoordinator,
-        entry: ConfigEntry,
-        device_name: str,
-        library_id: str,
-        library_name: str,
-    ) -> None:
-        """Initialize the sensor."""
-        # Use library_id in the sensor key to ensure uniqueness
-        super().__init__(coordinator, entry, device_name, f"library_storage_{library_id}")
-        self._library_id = library_id
-        self._library_name = library_name
-        # Set the sensor name to the library name
-        self._attr_name = f"{library_name} Storage Size"
-        self._attr_translation_key = None  # We use custom name instead of translation
-
-    def _get_library_data(self) -> dict[str, Any] | None:
-        """Get storage data for this specific library."""
-        if not self.coordinator.data:
-            return None
-        storage = self.coordinator.data.get("storage")
-        if not storage or not isinstance(storage, dict):
-            return None
-        
-        libs = storage.get("Libraries", [])
-        for lib in libs:
-            if lib.get("Id") == self._library_id:
-                return lib
-        return None
-
-    @property
-    def native_value(self) -> float | None:
-        """Return library storage size in gigabytes."""
-        library = self._get_library_data()
-        if not library:
-            return None
-        
-        # Calculate total size from all folders in this library
-        folders = library.get("Folders", [])
-        total_bytes = 0
-        for folder in folders:
-            used_space = folder.get("UsedSpace", 0)
-            total_bytes += used_space
-        
-        if total_bytes == 0:
-            return 0.0
-        
-        # Convert to GB (binary: 1024^3)
-        return round(total_bytes / (1024 ** 3), 1)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional attributes."""
-        library = self._get_library_data()
-        if not library:
-            return {
-                "entry_id": self._entry.entry_id,
-                "config_entry_id": self._entry.entry_id,
-                "library_id": self._library_id,
-                "library_name": self._library_name,
-            }
-        
-        folders = library.get("Folders", [])
-        total_bytes = sum(f.get("UsedSpace", 0) for f in folders)
-        total_free_bytes = sum(f.get("FreeSpace", 0) for f in folders)
-        total_capacity = total_bytes + total_free_bytes
-        
-        # Calculate in different units
-        size_tb = round(total_bytes / (1024 ** 4), 2)
-        size_mb = round(total_bytes / (1024 ** 2), 1)
-        
-        # Calculate percentage if capacity is known
-        percentage_used = round((total_bytes / total_capacity) * 100, 1) if total_capacity > 0 else None
-        
-        folder_details = []
-        for folder in folders:
-            used = folder.get("UsedSpace", 0)
-            free = folder.get("FreeSpace", 0)
-            folder_details.append({
-                "path": folder.get("Path"),
-                "used_gb": round(used / (1024 ** 3), 1),
-                "free_gb": round(free / (1024 ** 3), 1),
-                "total_gb": round((used + free) / (1024 ** 3), 1),
-            })
-        
-        return {
-            "entry_id": self._entry.entry_id,
-            "config_entry_id": self._entry.entry_id,
-            "library_id": self._library_id,
-            "library_name": self._library_name,
-            "collection_type": library.get("CollectionType"),
-            "size_bytes": total_bytes,
-            "size_mb": size_mb,
-            "size_tb": size_tb,
-            "percentage_used": percentage_used,
-            "folders": folder_details,
-        }
